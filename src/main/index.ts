@@ -268,10 +268,13 @@ function registerIpc(): void {
     }
     return FS.deletePermanently(paths)
   })
-  const doQuickLook = (win: BrowserWindow | null, filePath: string): { ok: boolean; error?: string } => {
+  const doQuickLook = (senderWin: BrowserWindow | null, filePath: string): { ok: boolean; error?: string } => {
+    const win = senderWin ?? BrowserWindow.getFocusedWindow() ?? (windows.size > 0 ? [...windows][0] : null)
     if (win && process.platform === 'darwin') {
       try {
         win.previewFile(filePath, basename(filePath))
+        const qlNative = getQuickLookNative()
+        qlNative?.reload()
         return { ok: true }
       } catch (err) {
         return { ok: false, error: err instanceof Error ? err.message : String(err) }

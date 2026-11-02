@@ -5,6 +5,7 @@ export interface QuickLookNative {
   initInterceptor(cb: (key: string) => void): void
   isOpen(): boolean
   close(): void
+  reload(): void
 }
 
 let nativeModule: QuickLookNative | null = null

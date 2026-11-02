@@ -9,6 +9,7 @@
 - (void)startWithCallback:(napi_threadsafe_function)tsfn;
 - (BOOL)isPanelOpen;
 - (void)closePanel;
+- (void)reload;
 @end
 
 @implementation QLKeyInterceptor
@@ -31,6 +32,16 @@
     QLPreviewPanel* panel = [QLPreviewPanel sharedPreviewPanel];
     if ([panel isVisible]) {
       [panel orderOut:nil];
+    }
+  }
+}
+
+- (void)reload {
+  if ([QLPreviewPanel sharedPreviewPanelExists]) {
+    QLPreviewPanel* panel = [QLPreviewPanel sharedPreviewPanel];
+    if ([panel isVisible]) {
+      [panel reloadData];
+      [panel refreshCurrentPreviewItem];
     }
   }
 }
@@ -118,13 +129,20 @@ static napi_value Close(napi_env env, napi_callback_info info) {
   return NULL;
 }
 
+static napi_value Reload(napi_env env, napi_callback_info info) {
+  [[QLKeyInterceptor shared] reload];
+  return NULL;
+}
+
 NAPI_MODULE_INIT() {
-  napi_value fnInit, fnIsOpen, fnClose;
+  napi_value fnInit, fnIsOpen, fnClose, fnReload;
   napi_create_function(env, "initInterceptor", NAPI_AUTO_LENGTH, InitInterceptor, NULL, &fnInit);
   napi_create_function(env, "isOpen", NAPI_AUTO_LENGTH, IsOpen, NULL, &fnIsOpen);
   napi_create_function(env, "close", NAPI_AUTO_LENGTH, Close, NULL, &fnClose);
+  napi_create_function(env, "reload", NAPI_AUTO_LENGTH, Reload, NULL, &fnReload);
   napi_set_named_property(env, exports, "initInterceptor", fnInit);
   napi_set_named_property(env, exports, "isOpen", fnIsOpen);
   napi_set_named_property(env, exports, "close", fnClose);
+  napi_set_named_property(env, exports, "reload", fnReload);
   return exports;
 }
