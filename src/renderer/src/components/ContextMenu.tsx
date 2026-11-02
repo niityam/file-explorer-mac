@@ -59,6 +59,8 @@ const ContextMenu: React.FC = () => {
   const paste = useExplorerStore((s) => s.paste)
   const beginRename = useExplorerStore((s) => s.beginRename)
   const deleteSelection = useExplorerStore((s) => s.deleteSelection)
+  const deletePermanently = useExplorerStore((s) => s.deletePermanently)
+  const toggleQuickLook = useExplorerStore((s) => s.toggleQuickLook)
   const revealSelectionInFinder = useExplorerStore((s) => s.revealSelectionInFinder)
   const refresh = useExplorerStore((s) => s.refresh)
   const createFolder = useExplorerStore((s) => s.createFolder)
@@ -137,6 +139,12 @@ const ContextMenu: React.FC = () => {
         disabled: !!targetItem && targetItem.isDirectory,
         onClick: () => void openWithSelection()
       },
+      {
+        label: 'Quick Look',
+        icon: 'eye',
+        shortcut: 'Space',
+        onClick: () => void toggleQuickLook(target)
+      },
       ...(canPin
         ? [
             {
@@ -206,11 +214,17 @@ const ContextMenu: React.FC = () => {
       { label: 'Reveal in Finder', onClick: revealSelectionInFinder },
       { type: 'separator' },
       {
-        label: 'Delete',
+        label: 'Move to Trash',
         icon: 'delete',
-        shortcut: 'Del',
+        shortcut: '⌘⌫',
         danger: true,
         onClick: () => void deleteSelection()
+      },
+      {
+        label: 'Delete Permanently',
+        shortcut: '⇧⌫',
+        danger: true,
+        onClick: () => void deletePermanently()
       },
       { label: 'Properties', icon: 'info', shortcut: 'Cmd+I', onClick: () => openProperties(target) },
       ...cloudItems()

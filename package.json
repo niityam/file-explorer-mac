@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "build": "electron-vite build",
+    "build:native": "node scripts/build-native.mjs",
+    "build": "electron-vite build && node scripts/build-native.mjs",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck:test": "tsc --noEmit -p tsconfig.vitest.json",
@@ -60,6 +61,9 @@
       "out/**/*",
       "build/icon.png",
       "!**/*.map"
+    ],
+    "asarUnpack": [
+      "**/*.node"
     ],
     "mac": {
       "category": "public.app-category.utilities",

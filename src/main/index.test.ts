@@ -25,6 +25,7 @@ vi.mock('./fileSystem', () => {
     createTextFile: fn(),
     rename: fn(),
     moveToTrash: fn(),
+    deletePermanently: fn(),
     listConflicts: fn(),
     copy: fn(),
     move: fn(),
@@ -80,6 +81,9 @@ interface FakeWin {
   close: ReturnType<typeof vi.fn>
   getBounds: ReturnType<typeof vi.fn>
   show: ReturnType<typeof vi.fn>
+  previewFile: ReturnType<typeof vi.fn>
+  closeFilePreview: ReturnType<typeof vi.fn>
+  isDestroyed: ReturnType<typeof vi.fn>
 }
 
 const createdWindows: FakeWin[] = []
@@ -124,7 +128,10 @@ function makeFakeWin(): FakeWin {
     focus: vi.fn(),
     close: vi.fn(),
     getBounds: vi.fn().mockReturnValue({ x: 10, y: 20, width: 800, height: 600 }),
-    show: vi.fn()
+    show: vi.fn(),
+    previewFile: vi.fn(),
+    closeFilePreview: vi.fn(),
+    isDestroyed: vi.fn().mockReturnValue(false)
   }
   return win
 }
@@ -180,7 +187,10 @@ const ipcMainMock = {
 }
 
 // ---- dialog / shell / nativeImage ------------------------------------------
-const dialogMock = { showOpenDialog: vi.fn().mockResolvedValue({ canceled: true, filePaths: [] }) }
+const dialogMock = {
+  showOpenDialog: vi.fn().mockResolvedValue({ canceled: true, filePaths: [] }),
+  showMessageBox: vi.fn().mockResolvedValue({ response: 0 })
+}
 const shellMock = { openExternal: vi.fn() }
 
 function makeImg(isEmpty: boolean): unknown {
@@ -202,7 +212,11 @@ vi.mock('electron', () => ({
   BrowserWindow: BrowserWindowMock,
   dialog: dialogMock,
   ipcMain: ipcMainMock,
-  nativeImage: nativeImageMock
+  nativeImage: nativeImageMock,
+  systemPreferences: {
+    subscribeLocalNotification: vi.fn(),
+    unsubscribeLocalNotification: vi.fn()
+  }
 }))
 
 // Analytics is exercised in analytics.test.ts; here we only verify it's invoked.
@@ -556,6 +570,10 @@ describe('ipc handlers route into FS', () => {
     expect(FS.rename).toHaveBeenCalledWith('/p', 'n')
     await ipcHandle[IPC.moveToTrash](ev, ['/p'])
     expect(FS.moveToTrash).toHaveBeenCalledWith(['/p'])
+    await ipcHandle[IPC.deletePermanently](ev, ['/p'], false)
+    expect(FS.deletePermanently).toHaveBeenCalledWith(['/p'])
+    await ipcHandle[IPC.quickLook](ev, '/f')
+    await ipcHandle[IPC.closeQuickLook](ev)
     await ipcHandle[IPC.listConflicts](ev, ['/s'], '/d')
     expect(FS.listConflicts).toHaveBeenCalledWith(['/s'], '/d')
     await ipcHandle[IPC.search](ev, '/r', 'q')

@@ -43,6 +43,35 @@ export function useKeyboardShortcuts(): void {
         return
       }
 
+      // Quick Look: Space
+      if ((e.key === ' ' || e.code === 'Space') && !mod && !e.altKey && !e.shiftKey) {
+        if (typeBuffer === '' && (s.selection.size > 0 || s.isQuickLookOpen)) {
+          e.preventDefault()
+          void s.toggleQuickLook()
+          return
+        }
+      }
+
+      const isDeleteKey = e.key === 'Backspace' || e.key === 'Delete'
+
+      // Delete permanently: Shift+Delete / Shift+Backspace (⇧⌫) or Option+Cmd+Backspace / Option+Cmd+Delete (⌥⌘⌫)
+      if ((e.shiftKey && isDeleteKey) || (e.altKey && mod && isDeleteKey)) {
+        if (s.selection.size) {
+          e.preventDefault()
+          void s.deletePermanently()
+        }
+        return
+      }
+
+      // Move to Trash: Cmd/Ctrl+Backspace or Cmd/Ctrl+Delete (⌘⌫)
+      if (mod && !e.shiftKey && !e.altKey && isDeleteKey) {
+        if (s.selection.size) {
+          e.preventDefault()
+          void s.deleteSelection()
+        }
+        return
+      }
+
       // Focus search: Ctrl/Cmd+F or Ctrl/Cmd+E
       if (mod && (e.key === 'f' || e.key === 'e')) {
         e.preventDefault()
@@ -163,6 +192,9 @@ export function useKeyboardShortcuts(): void {
         /* v8 ignore stop */
         if (e.shiftKey) s.rangeSelectTo(target.path)
         else s.selectOne(target.path)
+        if (s.isQuickLookOpen) {
+          void s.updateQuickLook(target.path)
+        }
         scrollPathIntoView(target.path)
         return
       }
@@ -188,7 +220,11 @@ export function useKeyboardShortcuts(): void {
           return
         case 'Backspace':
           e.preventDefault()
-          s.goBack()
+          if (s.selection.size) {
+            void s.deleteSelection()
+          } else {
+            s.goBack()
+          }
           return
         case 'Enter': {
           const sel = [...s.selection]
@@ -203,6 +239,11 @@ export function useKeyboardShortcuts(): void {
           return
         }
         case 'Escape':
+          if (s.isQuickLookOpen) {
+            e.preventDefault()
+            void s.closeQuickLook()
+            return
+          }
           if (s.contextMenu) s.closeContextMenu()
           else s.clearSelection()
           return
@@ -242,6 +283,9 @@ export function useKeyboardShortcuts(): void {
           e.preventDefault()
           const path = visible[found].path
           s.selectOne(path)
+          if (s.isQuickLookOpen) {
+            void s.updateQuickLook(path)
+          }
           scrollPathIntoView(path)
         }
       }

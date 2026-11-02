@@ -178,6 +178,10 @@ interface ExplorerState {
   // Context menu
   contextMenu: ContextMenuState | null
 
+  // Quick Look
+  isQuickLookOpen: boolean
+  quickLookPath: string | null
+
   // Status flash message
   statusMessage: string | null
 
@@ -224,6 +228,10 @@ interface ExplorerState {
   createFolder: () => Promise<void>
   createTextFile: () => Promise<void>
   deleteSelection: () => Promise<void>
+  deletePermanently: (confirm?: boolean) => Promise<void>
+  toggleQuickLook: (targetPath?: string) => Promise<void>
+  closeQuickLook: () => Promise<void>
+  updateQuickLook: (path: string) => Promise<void>
   revealSelectionInFinder: () => void
 
   setSearchQuery: (q: string) => void
@@ -411,10 +419,57 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
   contextMenu: null,
   statusMessage: null,
 
+  isQuickLookOpen: false,
+  quickLookPath: null,
+
   init: async () => {
     if (!progressSubscribed) {
       progressSubscribed = true
       window.api.onOpProgress((p) => set({ operation: p }))
+      window.api.onQuickLookClosed?.(() => set({ isQuickLookOpen: false, quickLookPath: null }))
+      window.api.onQuickLookKey?.((key: string) => {
+        const s = get()
+        if (!s.isQuickLookOpen) return
+
+        if (key === 'Space' || key === 'Escape') {
+          void get().closeQuickLook()
+          return
+        }
+
+        const visible = selectVisibleItems(s)
+        if (!visible.length) return
+
+        const isShift = key.startsWith('Shift+')
+        const cleanKey = isShift ? key.replace('Shift+', '') : key
+
+        const active = s.quickLookPath || s.anchorPath || [...s.selection][0] || null
+        const cur = active ? visible.findIndex((i) => i.path === active) : -1
+        let next = cur
+        if (cleanKey === 'ArrowDown') {
+          next = cur < 0 ? 0 : Math.min(visible.length - 1, cur + 1)
+        } else if (cleanKey === 'ArrowUp') {
+          next = cur < 0 ? visible.length - 1 : Math.max(0, cur - 1)
+        } else if (cleanKey === 'ArrowRight') {
+          next = Math.min(visible.length - 1, (cur < 0 ? 0 : cur) + 1)
+        } else if (cleanKey === 'ArrowLeft') {
+          next = Math.max(0, (cur < 0 ? 0 : cur) - 1)
+        }
+
+        if (next === cur || next < 0) return
+        const target = visible[next]
+        if (!target) return
+
+        if (isShift) {
+          get().rangeSelectTo(target.path)
+        } else {
+          get().selectOne(target.path)
+        }
+        void get().updateQuickLook(target.path)
+        if (typeof document !== 'undefined') {
+          const escaped = target.path.replace(/["\\]/g, '\\$&')
+          document.querySelector(`[data-path="${escaped}"]`)?.scrollIntoView({ block: 'nearest' })
+        }
+      })
       // Files may have been copied elsewhere (Finder) while we were unfocused.
       window.addEventListener('focus', () => void get().refreshClipboardStatus())
     }
@@ -487,6 +542,9 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
   },
 
   navigateTo: async (path, opts) => {
+    if (get().isQuickLookOpen) {
+      void get().closeQuickLook()
+    }
     const replace = opts?.replace ?? false
     set((s) => {
       const tabs = s.tabs.map((t) => ({ ...t, history: [...t.history] }))
@@ -620,7 +678,9 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
   setSelection: (paths, anchor) =>
     set({ selection: new Set(paths), anchorPath: anchor ?? paths[paths.length - 1] ?? null }),
 
-  selectOne: (path) => set({ selection: new Set([path]), anchorPath: path }),
+  selectOne: (path) => {
+    set({ selection: new Set([path]), anchorPath: path })
+  },
 
   toggleSelect: (path) =>
     set((s) => {
@@ -654,7 +714,12 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
       return { selection: next }
     }),
 
-  clearSelection: () => set({ selection: new Set(), anchorPath: null }),
+  clearSelection: () => {
+    if (get().isQuickLookOpen) {
+      void get().closeQuickLook()
+    }
+    set({ selection: new Set(), anchorPath: null })
+  },
 
   openItem: async (item) => {
     // Opening an item (file or folder) is what makes it "recent" — plain
@@ -767,6 +832,52 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
     if (!res.ok) get().flashStatus(res.error ?? 'Delete failed')
     set({ selection: new Set() })
     await get().refresh()
+  },
+
+  deletePermanently: async (confirm = true) => {
+    const paths = [...get().selection]
+    if (!paths.length) return
+    const res = await window.api.deletePermanently(paths, confirm)
+    if (!res.ok) get().flashStatus(res.error ?? 'Delete failed')
+    if (res.ok && !('canceled' in res && res.canceled)) {
+      set({ selection: new Set() })
+      await get().refresh()
+    }
+  },
+
+  toggleQuickLook: async (targetPath) => {
+    const s = get()
+    const path =
+      targetPath ??
+      (s.anchorPath && s.selection.has(s.anchorPath) ? s.anchorPath : [...s.selection][0])
+    if (!path) {
+      if (s.isQuickLookOpen) {
+        await get().closeQuickLook()
+      }
+      return
+    }
+    if (s.isQuickLookOpen && s.quickLookPath === path) {
+      await get().closeQuickLook()
+    } else {
+      set({ isQuickLookOpen: true, quickLookPath: path })
+      const res = await window.api.quickLook(path)
+      if (!res.ok) {
+        set({ isQuickLookOpen: false, quickLookPath: null })
+        get().flashStatus(res.error ?? 'Quick Look failed')
+      }
+    }
+  },
+
+  closeQuickLook: async () => {
+    set({ isQuickLookOpen: false, quickLookPath: null })
+    await window.api.closeQuickLook()
+  },
+
+  updateQuickLook: async (path) => {
+    const s = get()
+    if (!s.isQuickLookOpen) return
+    set({ quickLookPath: path })
+    await window.api.quickLook(path)
   },
 
   revealSelectionInFinder: () => {

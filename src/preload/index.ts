@@ -26,6 +26,19 @@ const api: FileExplorerApi = {
   createTextFile: (dir, name) => ipcRenderer.invoke(IPC.createTextFile, dir, name),
   rename: (p, name) => ipcRenderer.invoke(IPC.rename, p, name),
   moveToTrash: (paths) => ipcRenderer.invoke(IPC.moveToTrash, paths),
+  deletePermanently: (paths, confirm) => ipcRenderer.invoke(IPC.deletePermanently, paths, confirm),
+  quickLook: (p) => ipcRenderer.invoke(IPC.quickLook, p),
+  closeQuickLook: () => ipcRenderer.invoke(IPC.closeQuickLook),
+  onQuickLookClosed: (cb) => {
+    const listener = (): void => cb()
+    ipcRenderer.on(IPC.quickLookClosed, listener)
+    return () => ipcRenderer.removeListener(IPC.quickLookClosed, listener)
+  },
+  onQuickLookKey: (cb) => {
+    const listener = (_e: unknown, key: string): void => cb(key)
+    ipcRenderer.on(IPC.quickLookKey, listener)
+    return () => ipcRenderer.removeListener(IPC.quickLookKey, listener)
+  },
   listConflicts: (src, dest) => ipcRenderer.invoke(IPC.listConflicts, src, dest),
   copy: (src, dest, policy) => ipcRenderer.invoke(IPC.copy, src, dest, policy),
   move: (src, dest, policy) => ipcRenderer.invoke(IPC.move, src, dest, policy),

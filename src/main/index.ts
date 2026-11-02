@@ -1,5 +1,5 @@
-import { app, shell, BrowserWindow, dialog, ipcMain, nativeImage, type IpcMainEvent } from 'electron'
-import { join, dirname } from 'path'
+import { app, shell, BrowserWindow, dialog, ipcMain, nativeImage, systemPreferences, type IpcMainEvent } from 'electron'
+import { join, dirname, basename } from 'path'
 import { existsSync, writeFileSync, statSync } from 'fs'
 import { IPC, type ConflictPolicy } from '../shared/types'
 import * as FS from './fileSystem'
@@ -8,6 +8,7 @@ import { getCloudRoots, cloudInfo, openOnWeb, makeAvailableOffline } from './clo
 import { trackAppStarted } from './analytics'
 import { initAutoUpdater, checkForUpdates, installUpdate } from './updater'
 import { installAppMenu } from './menu'
+import { getQuickLookNative } from './quickLookNative'
 
 // Name the running app before it's ready so the macOS menu bar, notifications,
 // and the userData directory use "File Explorer" instead of Electron's default.
@@ -153,6 +154,29 @@ function createWindow(): BrowserWindow {
   win.on('enter-full-screen', emitFullScreen(true))
   win.on('leave-full-screen', emitFullScreen(false))
 
+  if (process.platform === 'darwin' && systemPreferences?.subscribeLocalNotification) {
+    const subId = systemPreferences.subscribeLocalNotification(
+      'QLPreviewPanelWillCloseNotification',
+      () => {
+        if (!win.isDestroyed()) {
+          win.webContents.send(IPC.quickLookClosed)
+        }
+      }
+    )
+    win.on('closed', () => {
+      systemPreferences.unsubscribeLocalNotification?.(subId)
+    })
+  }
+
+  const qlNative = getQuickLookNative()
+  if (qlNative) {
+    qlNative.initInterceptor((key: string) => {
+      if (!win.isDestroyed()) {
+        win.webContents.send(IPC.quickLookKey, key)
+      }
+    })
+  }
+
   // Only hand http(s) URLs to the OS; never open arbitrary schemes externally.
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url)
@@ -218,6 +242,55 @@ function registerIpc(): void {
   ipcMain.handle(IPC.createTextFile, (_e, dir: string, name: string) => FS.createTextFile(dir, name))
   ipcMain.handle(IPC.rename, (_e, p: string, name: string) => FS.rename(p, name))
   ipcMain.handle(IPC.moveToTrash, (_e, paths: string[]) => FS.moveToTrash(paths))
+  ipcMain.handle(IPC.deletePermanently, async (e, paths: string[], confirm = true) => {
+    if (!Array.isArray(paths) || !paths.length) return { ok: true }
+    if (confirm) {
+      const win = BrowserWindow.fromWebContents(e.sender)
+      const count = paths.length
+      const name = basename(paths[0])
+      const message =
+        count === 1
+          ? `Are you sure you want to permanently delete "${name}"?`
+          : `Are you sure you want to permanently delete these ${count} items?`
+      const opts = {
+        type: 'warning' as const,
+        buttons: ['Delete', 'Cancel'],
+        defaultId: 0,
+        cancelId: 1,
+        message,
+        detail: 'This item will be deleted immediately. You cannot undo this action.'
+      }
+      const choice = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts)
+      if (choice.response !== 0) {
+        return { ok: true, canceled: true }
+      }
+    }
+    return FS.deletePermanently(paths)
+  })
+  ipcMain.handle(IPC.quickLook, (e, filePath: string) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    if (win && process.platform === 'darwin') {
+      try {
+        win.previewFile(filePath, basename(filePath))
+        return { ok: true }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    }
+    return { ok: true }
+  })
+  ipcMain.handle(IPC.closeQuickLook, (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    if (win && process.platform === 'darwin') {
+      try {
+        win.closeFilePreview()
+        return { ok: true }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    }
+    return { ok: true }
+  })
   ipcMain.handle(IPC.listConflicts, (_e, src: string[], dest: string) =>
     FS.listConflicts(src, dest)
   )

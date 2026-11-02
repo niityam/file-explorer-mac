@@ -305,10 +305,65 @@ describe('useKeyboardShortcuts — function & edit keys', () => {
     expect(ev.defaultPrevented).toBe(false)
   })
 
-  it('Backspace goes back', () => {
+  it('Backspace goes back when selection is empty', () => {
+    useExplorerStore.setState({ selection: new Set() })
     const spy = vi.spyOn(useExplorerStore.getState(), 'goBack')
     render(<Host />)
     const ev = key({ key: 'Backspace' })
+    expect(spy).toHaveBeenCalled()
+    expect(ev.defaultPrevented).toBe(true)
+  })
+
+  it('Backspace moves to trash when selection is non-empty', () => {
+    useExplorerStore.setState({ selection: new Set(['/p/a.txt']) })
+    const spy = vi.spyOn(useExplorerStore.getState(), 'deleteSelection')
+    render(<Host />)
+    const ev = key({ key: 'Backspace' })
+    expect(spy).toHaveBeenCalled()
+    expect(ev.defaultPrevented).toBe(true)
+  })
+
+  it('Cmd+Backspace (⌘⌫) moves to trash when selection is non-empty', () => {
+    useExplorerStore.setState({ selection: new Set(['/p/a.txt']) })
+    const spy = vi.spyOn(useExplorerStore.getState(), 'deleteSelection')
+    render(<Host />)
+    const ev = key({ key: 'Backspace', metaKey: true })
+    expect(spy).toHaveBeenCalled()
+    expect(ev.defaultPrevented).toBe(true)
+  })
+
+  it('Cmd+Delete moves to trash when selection is non-empty', () => {
+    useExplorerStore.setState({ selection: new Set(['/p/a.txt']) })
+    const spy = vi.spyOn(useExplorerStore.getState(), 'deleteSelection')
+    render(<Host />)
+    const ev = key({ key: 'Delete', metaKey: true })
+    expect(spy).toHaveBeenCalled()
+    expect(ev.defaultPrevented).toBe(true)
+  })
+
+  it('Shift+Delete (⇧⌫) deletes permanently when selection is non-empty', () => {
+    useExplorerStore.setState({ selection: new Set(['/p/a.txt']) })
+    const spy = vi.spyOn(useExplorerStore.getState(), 'deletePermanently')
+    render(<Host />)
+    const ev = key({ key: 'Delete', shiftKey: true })
+    expect(spy).toHaveBeenCalled()
+    expect(ev.defaultPrevented).toBe(true)
+  })
+
+  it('Shift+Backspace (⇧⌫) deletes permanently when selection is non-empty', () => {
+    useExplorerStore.setState({ selection: new Set(['/p/a.txt']) })
+    const spy = vi.spyOn(useExplorerStore.getState(), 'deletePermanently')
+    render(<Host />)
+    const ev = key({ key: 'Backspace', shiftKey: true })
+    expect(spy).toHaveBeenCalled()
+    expect(ev.defaultPrevented).toBe(true)
+  })
+
+  it('Option+Cmd+Backspace (⌥⌘⌫) deletes permanently when selection is non-empty', () => {
+    useExplorerStore.setState({ selection: new Set(['/p/a.txt']) })
+    const spy = vi.spyOn(useExplorerStore.getState(), 'deletePermanently')
+    render(<Host />)
+    const ev = key({ key: 'Backspace', altKey: true, metaKey: true })
     expect(spy).toHaveBeenCalled()
     expect(ev.defaultPrevented).toBe(true)
   })
@@ -358,6 +413,15 @@ describe('useKeyboardShortcuts — Enter', () => {
 })
 
 describe('useKeyboardShortcuts — Escape', () => {
+  it('closes Quick Look when Quick Look is open', () => {
+    useExplorerStore.setState({ isQuickLookOpen: true, quickLookPath: '/p/a.txt' })
+    const close = vi.spyOn(useExplorerStore.getState(), 'closeQuickLook')
+    render(<Host />)
+    const ev = key({ key: 'Escape' })
+    expect(close).toHaveBeenCalled()
+    expect(ev.defaultPrevented).toBe(true)
+  })
+
   it('closes the context menu when one is open', () => {
     useExplorerStore.setState({ contextMenu: { x: 1, y: 2, targetPath: null } })
     const close = vi.spyOn(useExplorerStore.getState(), 'closeContextMenu')
@@ -682,6 +746,60 @@ describe('useKeyboardShortcuts — mouse thumb buttons', () => {
     expect(mouse('mousedown', 1).defaultPrevented).toBe(false)
     expect(mouse('auxclick', 1).defaultPrevented).toBe(false)
     expect(back).not.toHaveBeenCalled()
+  })
+})
+
+describe('useKeyboardShortcuts — Quick Look (Space)', () => {
+  it('Space toggles Quick Look when selection is non-empty', () => {
+    useExplorerStore.setState({ selection: new Set(['/p/a.txt']) })
+    const spy = vi.spyOn(useExplorerStore.getState(), 'toggleQuickLook')
+    render(<Host />)
+    const ev = key({ key: ' ' })
+    expect(spy).toHaveBeenCalled()
+    expect(ev.defaultPrevented).toBe(true)
+  })
+
+  it('Space toggles Quick Look when Quick Look is open even if selection is empty', () => {
+    useExplorerStore.setState({ isQuickLookOpen: true, quickLookPath: '/p/a.txt', selection: new Set() })
+    const spy = vi.spyOn(useExplorerStore.getState(), 'toggleQuickLook')
+    render(<Host />)
+    const ev = key({ key: ' ' })
+    expect(spy).toHaveBeenCalled()
+    expect(ev.defaultPrevented).toBe(true)
+  })
+
+  it('ArrowDown navigates selection and updates Quick Look when preview is open', () => {
+    const a = makeFileItem({ name: 'a.txt', path: '/p/a.txt' })
+    const b = makeFileItem({ name: 'b.txt', path: '/p/b.txt' })
+    useExplorerStore.setState({
+      items: [a, b],
+      selection: new Set(['/p/a.txt']),
+      anchorPath: '/p/a.txt',
+      isQuickLookOpen: true,
+      quickLookPath: '/p/a.txt'
+    })
+    const updateSpy = vi.spyOn(useExplorerStore.getState(), 'updateQuickLook')
+    render(<Host />)
+    key({ key: 'ArrowDown' })
+    expect(useExplorerStore.getState().selection.has('/p/b.txt')).toBe(true)
+    expect(updateSpy).toHaveBeenCalledWith('/p/b.txt')
+  })
+
+  it('ArrowDown navigates selection without opening Quick Look when preview is closed', () => {
+    const a = makeFileItem({ name: 'a.txt', path: '/p/a.txt' })
+    const b = makeFileItem({ name: 'b.txt', path: '/p/b.txt' })
+    useExplorerStore.setState({
+      items: [a, b],
+      selection: new Set(['/p/a.txt']),
+      anchorPath: '/p/a.txt',
+      isQuickLookOpen: false,
+      quickLookPath: null
+    })
+    const updateSpy = vi.spyOn(useExplorerStore.getState(), 'updateQuickLook')
+    render(<Host />)
+    key({ key: 'ArrowDown' })
+    expect(useExplorerStore.getState().selection.has('/p/b.txt')).toBe(true)
+    expect(updateSpy).not.toHaveBeenCalled()
   })
 })
 

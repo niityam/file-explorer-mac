@@ -356,6 +356,94 @@ describe('deleteSelection', () => {
   })
 })
 
+describe('deletePermanently', () => {
+  it('no-ops when nothing is selected', async () => {
+    useExplorerStore.setState({ selection: new Set() })
+    await store().deletePermanently()
+    expect(api.deletePermanently).not.toHaveBeenCalled()
+  })
+
+  it('permanently deletes the selection and refreshes', async () => {
+    api.deletePermanently.mockResolvedValue({ ok: true })
+    useExplorerStore.setState({ currentPath: '/p', selection: new Set(['/p/a.txt']) })
+    await store().deletePermanently()
+    expect(api.deletePermanently).toHaveBeenCalledWith(['/p/a.txt'], true)
+    expect(store().selection.size).toBe(0)
+  })
+
+  it('does not clear selection if user cancels confirmation', async () => {
+    api.deletePermanently.mockResolvedValue({ ok: true, canceled: true })
+    useExplorerStore.setState({ currentPath: '/p', selection: new Set(['/p/a.txt']) })
+    await store().deletePermanently()
+    expect(api.deletePermanently).toHaveBeenCalledWith(['/p/a.txt'], true)
+    expect(store().selection.size).toBe(1)
+  })
+
+  it('flashes on failure', async () => {
+    api.deletePermanently.mockResolvedValue({ ok: false, error: 'permission denied' })
+    useExplorerStore.setState({ currentPath: '/p', selection: new Set(['/p/a.txt']) })
+    await store().deletePermanently()
+    expect(store().statusMessage).toBe('permission denied')
+  })
+})
+
+describe('Quick Look actions', () => {
+  it('toggleQuickLook opens preview for selected item', async () => {
+    api.quickLook.mockResolvedValue({ ok: true })
+    useExplorerStore.setState({ selection: new Set(['/p/a.txt']) })
+    await store().toggleQuickLook()
+    expect(api.quickLook).toHaveBeenCalledWith('/p/a.txt')
+    expect(store().isQuickLookOpen).toBe(true)
+    expect(store().quickLookPath).toBe('/p/a.txt')
+  })
+
+  it('toggleQuickLook closes preview when already open on the same item', async () => {
+    api.closeQuickLook.mockResolvedValue({ ok: true })
+    useExplorerStore.setState({
+      isQuickLookOpen: true,
+      quickLookPath: '/p/a.txt',
+      selection: new Set(['/p/a.txt'])
+    })
+    await store().toggleQuickLook()
+    expect(api.closeQuickLook).toHaveBeenCalled()
+    expect(store().isQuickLookOpen).toBe(false)
+    expect(store().quickLookPath).toBeNull()
+  })
+
+  it('closeQuickLook closes preview and resets state', async () => {
+    api.closeQuickLook.mockResolvedValue({ ok: true })
+    useExplorerStore.setState({
+      isQuickLookOpen: true,
+      quickLookPath: '/p/a.txt'
+    })
+    await store().closeQuickLook()
+    expect(api.closeQuickLook).toHaveBeenCalled()
+    expect(store().isQuickLookOpen).toBe(false)
+    expect(store().quickLookPath).toBeNull()
+  })
+
+  it('updateQuickLook updates preview if open', async () => {
+    api.quickLook.mockResolvedValue({ ok: true })
+    useExplorerStore.setState({
+      isQuickLookOpen: true,
+      quickLookPath: '/p/a.txt'
+    })
+    await store().updateQuickLook('/p/b.txt')
+    expect(api.quickLook).toHaveBeenCalledWith('/p/b.txt')
+    expect(store().quickLookPath).toBe('/p/b.txt')
+  })
+
+  it('selectOne updates selection without triggering preview directly', () => {
+    useExplorerStore.setState({
+      isQuickLookOpen: true,
+      quickLookPath: '/p/a.txt'
+    })
+    store().selectOne('/p/b.txt')
+    expect(store().selection.has('/p/b.txt')).toBe(true)
+    expect(api.quickLook).not.toHaveBeenCalled()
+  })
+})
+
 describe('revealSelectionInFinder', () => {
   it('reveals the first selected path', () => {
     useExplorerStore.setState({ selection: new Set(['/p/a.txt']) })

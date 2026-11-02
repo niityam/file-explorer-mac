@@ -132,10 +132,12 @@ const FileView: React.FC = () => {
     }
     if (e.shiftKey) {
       s.rangeSelectTo(item.path)
+      if (s.isQuickLookOpen) void s.updateQuickLook(item.path)
       return
     }
     const wasOnlySelected = s.selection.size === 1 && s.selection.has(item.path)
     s.selectOne(item.path)
+    if (s.isQuickLookOpen) void s.updateQuickLook(item.path)
     // Clicking again (slowly) on the already-sole-selected item starts a rename,
     // unless a double-click follows (handled below) — familiar file-manager behavior.
     clearRenameTimer()

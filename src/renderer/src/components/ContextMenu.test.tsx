@@ -218,12 +218,28 @@ describe('ContextMenu', () => {
       expect(revealSelectionInFinder).toHaveBeenCalledTimes(1)
     })
 
-    it('Delete runs deleteSelection', async () => {
+    it('Move to Trash runs deleteSelection', async () => {
       const deleteSelection = spyAction('deleteSelection')
       openItemMenu()
       render(<ContextMenu />)
-      await clickItem('Delete')
+      await clickItem('Move to Trash')
       expect(deleteSelection).toHaveBeenCalledTimes(1)
+    })
+
+    it('Delete Permanently runs deletePermanently', async () => {
+      const deletePermanently = spyAction('deletePermanently')
+      openItemMenu()
+      render(<ContextMenu />)
+      await clickItem('Delete Permanently')
+      expect(deletePermanently).toHaveBeenCalledTimes(1)
+    })
+
+    it('Quick Look runs toggleQuickLook', async () => {
+      const toggleQuickLook = spyAction('toggleQuickLook')
+      openItemMenu(makeFileItem({ name: 'a.txt', path: '/p/a.txt' }))
+      render(<ContextMenu />)
+      await clickItem('Quick Look')
+      expect(toggleQuickLook).toHaveBeenCalledWith('/p/a.txt')
     })
 
     it('Properties opens properties for the target path', async () => {

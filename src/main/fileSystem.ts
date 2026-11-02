@@ -265,6 +265,20 @@ export async function moveToTrash(paths: string[]): Promise<Result<void>> {
   return fail(new Error(`Couldn't delete: ${failures.join(', ')}`))
 }
 
+export async function deletePermanently(paths: string[]): Promise<Result<void>> {
+  // Remove each item permanently so one failure doesn't abort the rest.
+  const failures: string[] = []
+  for (const p of paths) {
+    try {
+      await fs.rm(p, { recursive: true, force: true })
+    } catch {
+      failures.push(basename(p))
+    }
+  }
+  if (failures.length === 0) return ok(undefined)
+  return fail(new Error(`Couldn't delete: ${failures.join(', ')}`))
+}
+
 export async function listConflicts(
   srcPaths: string[],
   destDir: string

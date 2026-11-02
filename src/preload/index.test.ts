@@ -146,6 +146,18 @@ describe('invoke-based methods', () => {
     api.moveToTrash(['/a', '/b'])
     expect(ipcRenderer.invoke).toHaveBeenCalledWith(IPC.moveToTrash, ['/a', '/b'])
   })
+  it('deletePermanently', () => {
+    api.deletePermanently(['/a', '/b'], false)
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith(IPC.deletePermanently, ['/a', '/b'], false)
+  })
+  it('quickLook', () => {
+    api.quickLook('/a')
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith(IPC.quickLook, '/a')
+  })
+  it('closeQuickLook', () => {
+    api.closeQuickLook()
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith(IPC.closeQuickLook)
+  })
   it('listConflicts', () => {
     api.listConflicts(['/s'], '/dest')
     expect(ipcRenderer.invoke).toHaveBeenCalledWith(IPC.listConflicts, ['/s'], '/dest')
@@ -302,6 +314,28 @@ describe('subscription (on*) methods', () => {
     expect(cb).toHaveBeenCalledWith('/go/here')
     unsub()
     expect(ipcRenderer.removeListener).toHaveBeenCalledWith(IPC.navigateToPath, listener)
+  })
+
+  it('onQuickLookClosed registers and unsubscribes', () => {
+    const cb = vi.fn()
+    const unsub = api.onQuickLookClosed(cb) as () => void
+    expect(ipcRenderer.on).toHaveBeenCalledWith(IPC.quickLookClosed, expect.any(Function))
+    const listener = vi.mocked(ipcRenderer.on).mock.calls[0][1] as () => void
+    listener()
+    expect(cb).toHaveBeenCalled()
+    unsub()
+    expect(ipcRenderer.removeListener).toHaveBeenCalledWith(IPC.quickLookClosed, listener)
+  })
+
+  it('onQuickLookKey registers, forwards arg, and unsubscribes', () => {
+    const cb = vi.fn()
+    const unsub = api.onQuickLookKey(cb) as () => void
+    expect(ipcRenderer.on).toHaveBeenCalledWith(IPC.quickLookKey, expect.any(Function))
+    const listener = vi.mocked(ipcRenderer.on).mock.calls[0][1] as (e: unknown, k: string) => void
+    listener({}, 'ArrowDown')
+    expect(cb).toHaveBeenCalledWith('ArrowDown')
+    unsub()
+    expect(ipcRenderer.removeListener).toHaveBeenCalledWith(IPC.quickLookKey, listener)
   })
 
   it('onUpdateStatus registers, forwards arg, and unsubscribes', () => {

@@ -216,6 +216,16 @@ export interface FileExplorerApi {
   rename(targetPath: string, newName: string): Promise<Result<FileItem>>
   /** Moves the given paths to the system Trash. */
   moveToTrash(paths: string[]): Promise<Result<void>>
+  /** Permanently deletes the given paths from disk immediately. */
+  deletePermanently(paths: string[], confirm?: boolean): Promise<Result<void> & { canceled?: boolean }>
+  /** Opens native macOS Quick Look preview for the given file path. */
+  quickLook(path: string): Promise<Result<void>>
+  /** Closes any active Quick Look preview panel. */
+  closeQuickLook(): Promise<Result<void>>
+  /** Subscribe to Quick Look closed events; returns an unsubscribe function. */
+  onQuickLookClosed(cb: () => void): () => void
+  /** Subscribe to key events intercepted while Quick Look is open (arrows, space, escape). */
+  onQuickLookKey(cb: (key: string) => void): () => void
   /** Names in destDir that already exist among the sources (for the conflict dialog). */
   listConflicts(srcPaths: string[], destDir: string): Promise<Result<string[]>>
   copy(srcPaths: string[], destDir: string, policy?: ConflictPolicy): Promise<Result<TransferResult>>
@@ -293,6 +303,11 @@ export const IPC = {
   createTextFile: 'fs:createTextFile',
   rename: 'fs:rename',
   moveToTrash: 'fs:moveToTrash',
+  deletePermanently: 'fs:deletePermanently',
+  quickLook: 'win:quickLook',
+  closeQuickLook: 'win:closeQuickLook',
+  quickLookClosed: 'win:quickLookClosed',
+  quickLookKey: 'win:quickLookKey',
   listConflicts: 'fs:listConflicts',
   copy: 'fs:copy',
   move: 'fs:move',

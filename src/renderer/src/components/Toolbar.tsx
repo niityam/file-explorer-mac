@@ -188,7 +188,7 @@ const Toolbar: React.FC = () => {
       <button
         type="button"
         className={styles.button}
-        title="Delete  Del"
+        title="Delete (Move to Trash)  ⌘⌫"
         disabled={!hasSelection}
         onClick={() => void useExplorerStore.getState().deleteSelection()}
       >

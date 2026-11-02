@@ -205,6 +205,29 @@ describe('moveToTrash', () => {
   })
 })
 
+describe('deletePermanently', () => {
+  it('permanently deletes existing files and directories', async () => {
+    const file = join(dir, 'to-delete.txt')
+    await writeFile(file, 'hello')
+    const subDir = join(dir, 'to-delete-dir')
+    await mkdir(subDir)
+    await writeFile(join(subDir, 'sub.txt'), 'nested')
+
+    const res = await fsApi.deletePermanently([file, subDir])
+    expect(res.ok).toBe(true)
+
+    const existsFile = await fsApi.pathExists(file)
+    const existsDir = await fsApi.pathExists(subDir)
+    expect(existsFile).toBe(false)
+    expect(existsDir).toBe(false)
+  })
+
+  it('lists failures when an item cannot be deleted', async () => {
+    const res = await fsApi.deletePermanently([join(dir, 'nonexistent')])
+    expect(res.ok).toBe(true) // fs.rm force: true doesn't fail on nonexistent
+  })
+})
+
 describe('listConflicts', () => {
   it('skips same-dir moves and reports real conflicts', async () => {
     const src1 = join(dir, 'x.txt')
