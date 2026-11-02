@@ -506,7 +506,24 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
     // on the virtual Home page (which has no directory to read).
     const seq = ++loadSeq
     if (path === HOME_PATH) {
-      set({ items: [], loading: false, error: null, errorCode: null, pendingRenamePath: null })
+      const recents = get().recents
+      if (recents.length > 0) {
+        const results = await Promise.all(recents.map((p) => window.api.getFileItem(p)))
+        if (seq !== loadSeq) return
+        const resolved: FileItem[] = []
+        const missing: string[] = []
+        results.forEach((r, i) => {
+          if (r.ok && r.data) resolved.push(r.data)
+          else missing.push(recents[i])
+        })
+        if (missing.length) {
+          set((s) => ({ recents: s.recents.filter((p) => !missing.includes(p)) }))
+          persist(get())
+        }
+        set({ items: resolved, loading: false, error: null, errorCode: null, pendingRenamePath: null })
+      } else {
+        set({ items: [], loading: false, error: null, errorCode: null, pendingRenamePath: null })
+      }
       return
     }
     set({ loading: true, error: null, errorCode: null })
@@ -1080,12 +1097,19 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
   },
 
   removeRecent: (path) => {
-    set((s) => ({ recents: s.recents.filter((p) => p !== path) }))
+    set((s) => ({
+      recents: s.recents.filter((p) => p !== path),
+      items: s.currentPath === HOME_PATH ? s.items.filter((i) => i.path !== path) : s.items
+    }))
     persist(get())
   },
 
   clearRecents: () => {
-    set({ recents: [] })
+    set((s) => ({
+      recents: [],
+      items: s.currentPath === HOME_PATH ? [] : s.items,
+      selection: s.currentPath === HOME_PATH ? new Set() : s.selection
+    }))
     persist(get())
   },
 

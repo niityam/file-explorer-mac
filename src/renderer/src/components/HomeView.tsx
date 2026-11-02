@@ -22,7 +22,13 @@ const QUICK_ICON: Record<QuickLinkIcon, IconName> = {
 /** Resolve a list of stored paths into live FileItems, dropping (and pruning)
  *  any that no longer exist on disk. */
 function useResolved(paths: string[], prune: (p: string) => void): FileItem[] {
-  const [items, setItems] = useState<FileItem[]>([])
+  const [items, setItems] = useState<FileItem[]>(() => {
+    const st = useExplorerStore.getState().items
+    if (st.length > 0 && st.every((i) => paths.includes(i.path))) {
+      return st
+    }
+    return []
+  })
   // Join into a stable key so the effect only re-runs when the set changes.
   const key = paths.join('\0')
   useEffect(() => {
