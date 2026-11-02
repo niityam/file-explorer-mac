@@ -171,8 +171,9 @@ function createWindow(): BrowserWindow {
   const qlNative = getQuickLookNative()
   if (qlNative) {
     qlNative.initInterceptor((key: string) => {
-      if (!win.isDestroyed()) {
-        win.webContents.send(IPC.quickLookKey, key)
+      const targetWin = BrowserWindow.getFocusedWindow() ?? (windows.size > 0 ? [...windows][0] : null)
+      if (targetWin && !targetWin.isDestroyed()) {
+        targetWin.webContents.send(IPC.quickLookKey, key)
       }
     })
   }
@@ -267,8 +268,7 @@ function registerIpc(): void {
     }
     return FS.deletePermanently(paths)
   })
-  ipcMain.handle(IPC.quickLook, (e, filePath: string) => {
-    const win = BrowserWindow.fromWebContents(e.sender)
+  const doQuickLook = (win: BrowserWindow | null, filePath: string): { ok: boolean; error?: string } => {
     if (win && process.platform === 'darwin') {
       try {
         win.previewFile(filePath, basename(filePath))
@@ -278,9 +278,11 @@ function registerIpc(): void {
       }
     }
     return { ok: true }
-  })
-  ipcMain.handle(IPC.closeQuickLook, (e) => {
-    const win = BrowserWindow.fromWebContents(e.sender)
+  }
+
+  const doCloseQuickLook = (win: BrowserWindow | null): { ok: boolean; error?: string } => {
+    const qlNative = getQuickLookNative()
+    qlNative?.close()
     if (win && process.platform === 'darwin') {
       try {
         win.closeFilePreview()
@@ -290,6 +292,20 @@ function registerIpc(): void {
       }
     }
     return { ok: true }
+  }
+
+  ipcMain.handle(IPC.quickLook, (e, filePath: string) => {
+    return doQuickLook(BrowserWindow.fromWebContents(e.sender), filePath)
+  })
+  ipcMain.on(IPC.quickLook, (e, filePath: string) => {
+    doQuickLook(BrowserWindow.fromWebContents(e.sender), filePath)
+  })
+
+  ipcMain.handle(IPC.closeQuickLook, (e) => {
+    return doCloseQuickLook(BrowserWindow.fromWebContents(e.sender))
+  })
+  ipcMain.on(IPC.closeQuickLook, (e) => {
+    doCloseQuickLook(BrowserWindow.fromWebContents(e.sender))
   })
   ipcMain.handle(IPC.listConflicts, (_e, src: string[], dest: string) =>
     FS.listConflicts(src, dest)

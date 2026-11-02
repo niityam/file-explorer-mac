@@ -432,7 +432,8 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
         if (!s.isQuickLookOpen) return
 
         if (key === 'Space' || key === 'Escape') {
-          void get().closeQuickLook()
+          set({ isQuickLookOpen: false, quickLookPath: null })
+          void window.api.closeQuickLook()
           return
         }
 
@@ -461,10 +462,11 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
 
         if (isShift) {
           get().rangeSelectTo(target.path)
+          set({ quickLookPath: target.path })
         } else {
-          get().selectOne(target.path)
+          set({ selection: new Set([target.path]), anchorPath: target.path, quickLookPath: target.path })
         }
-        void get().updateQuickLook(target.path)
+        void window.api.quickLook(target.path)
         if (typeof document !== 'undefined') {
           const escaped = target.path.replace(/["\\]/g, '\\$&')
           document.querySelector(`[data-path="${escaped}"]`)?.scrollIntoView({ block: 'nearest' })
@@ -852,32 +854,30 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
       (s.anchorPath && s.selection.has(s.anchorPath) ? s.anchorPath : [...s.selection][0])
     if (!path) {
       if (s.isQuickLookOpen) {
-        await get().closeQuickLook()
+        set({ isQuickLookOpen: false, quickLookPath: null })
+        void window.api.closeQuickLook()
       }
       return
     }
     if (s.isQuickLookOpen && s.quickLookPath === path) {
-      await get().closeQuickLook()
+      set({ isQuickLookOpen: false, quickLookPath: null })
+      void window.api.closeQuickLook()
     } else {
       set({ isQuickLookOpen: true, quickLookPath: path })
-      const res = await window.api.quickLook(path)
-      if (!res.ok) {
-        set({ isQuickLookOpen: false, quickLookPath: null })
-        get().flashStatus(res.error ?? 'Quick Look failed')
-      }
+      void window.api.quickLook(path)
     }
   },
 
   closeQuickLook: async () => {
     set({ isQuickLookOpen: false, quickLookPath: null })
-    await window.api.closeQuickLook()
+    void window.api.closeQuickLook()
   },
 
   updateQuickLook: async (path) => {
     const s = get()
     if (!s.isQuickLookOpen) return
     set({ quickLookPath: path })
-    await window.api.quickLook(path)
+    void window.api.quickLook(path)
   },
 
   revealSelectionInFinder: () => {

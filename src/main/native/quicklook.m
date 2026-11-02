@@ -8,6 +8,7 @@
 + (instancetype)shared;
 - (void)startWithCallback:(napi_threadsafe_function)tsfn;
 - (BOOL)isPanelOpen;
+- (void)closePanel;
 @end
 
 @implementation QLKeyInterceptor
@@ -25,7 +26,19 @@
   return [QLPreviewPanel sharedPreviewPanelExists] && [[QLPreviewPanel sharedPreviewPanel] isVisible];
 }
 
+- (void)closePanel {
+  if ([QLPreviewPanel sharedPreviewPanelExists]) {
+    QLPreviewPanel* panel = [QLPreviewPanel sharedPreviewPanel];
+    if ([panel isVisible]) {
+      [panel orderOut:nil];
+    }
+  }
+}
+
 - (void)startWithCallback:(napi_threadsafe_function)tsfn {
+  if (self.tsfn) {
+    napi_release_threadsafe_function(self.tsfn, napi_tsfn_abort);
+  }
   self.tsfn = tsfn;
   if (self.monitor) return;
 
@@ -42,16 +55,23 @@
       else if (code == 49) keyName = "Space";
       else if (code == 53) keyName = "Escape";
 
-      if (keyName && self.tsfn) {
-        BOOL isShift = (event.modifierFlags & NSEventModifierFlagShift) != 0;
-        char buffer[128];
-        if (isShift) {
-          snprintf(buffer, sizeof(buffer), "Shift+%s", keyName);
-        } else {
-          snprintf(buffer, sizeof(buffer), "%s", keyName);
+      if (keyName) {
+        if (code == 49 || code == 53) {
+          // Instant closing: hide the panel immediately without waiting for IPC roundtrip!
+          [self closePanel];
         }
-        char* str = strdup(buffer);
-        napi_call_threadsafe_function(self.tsfn, str, napi_tsfn_nonblocking);
+
+        if (self.tsfn) {
+          BOOL isShift = (event.modifierFlags & NSEventModifierFlagShift) != 0;
+          char buffer[128];
+          if (isShift) {
+            snprintf(buffer, sizeof(buffer), "Shift+%s", keyName);
+          } else {
+            snprintf(buffer, sizeof(buffer), "%s", keyName);
+          }
+          char* str = strdup(buffer);
+          napi_call_threadsafe_function(self.tsfn, str, napi_tsfn_nonblocking);
+        }
         return nil; // Consume key event: prevents scrolling in Word/Excel preview!
       }
       return event;
@@ -63,9 +83,11 @@
 static void CallJsCallback(napi_env env, napi_value js_cb, void* context, void* data) {
   if (env && js_cb && data) {
     char* keyName = (char*)data;
+    napi_value undef;
+    napi_get_undefined(env, &undef);
     napi_value str;
     napi_create_string_utf8(env, keyName, NAPI_AUTO_LENGTH, &str);
-    napi_call_function(env, NULL, js_cb, 1, &str, NULL);
+    napi_call_function(env, undef, js_cb, 1, &str, NULL);
     free(keyName);
   }
 }
@@ -80,6 +102,7 @@ static napi_value InitInterceptor(napi_env env, napi_callback_info info) {
 
   napi_threadsafe_function tsfn;
   napi_create_threadsafe_function(env, argv[0], NULL, resource_name, 0, 1, NULL, NULL, NULL, CallJsCallback, &tsfn);
+  napi_unref_threadsafe_function(env, tsfn);
   [[QLKeyInterceptor shared] startWithCallback:tsfn];
   return NULL;
 }
@@ -90,11 +113,18 @@ static napi_value IsOpen(napi_env env, napi_callback_info info) {
   return res;
 }
 
+static napi_value Close(napi_env env, napi_callback_info info) {
+  [[QLKeyInterceptor shared] closePanel];
+  return NULL;
+}
+
 NAPI_MODULE_INIT() {
-  napi_value fnInit, fnIsOpen;
+  napi_value fnInit, fnIsOpen, fnClose;
   napi_create_function(env, "initInterceptor", NAPI_AUTO_LENGTH, InitInterceptor, NULL, &fnInit);
   napi_create_function(env, "isOpen", NAPI_AUTO_LENGTH, IsOpen, NULL, &fnIsOpen);
+  napi_create_function(env, "close", NAPI_AUTO_LENGTH, Close, NULL, &fnClose);
   napi_set_named_property(env, exports, "initInterceptor", fnInit);
   napi_set_named_property(env, exports, "isOpen", fnIsOpen);
+  napi_set_named_property(env, exports, "close", fnClose);
   return exports;
 }

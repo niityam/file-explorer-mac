@@ -4,6 +4,7 @@ import { existsSync } from 'fs'
 export interface QuickLookNative {
   initInterceptor(cb: (key: string) => void): void
   isOpen(): boolean
+  close(): void
 }
 
 let nativeModule: QuickLookNative | null = null
