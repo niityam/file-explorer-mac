@@ -64,20 +64,57 @@ const QuickTile: React.FC<{ link: QuickLink; glyph: React.ReactNode }> = ({ link
   )
 }
 
-/** A row in the Recent / Favorites list. Double click opens, like the file view. */
+/** A row in the Recent / Favorites list. Double click opens, single click selects. */
 const ItemRow: React.FC<{
   item: FileItem
   homeDir: string
   action: { icon: IconName; title: string; onClick: () => void }
 }> = ({ item, homeDir, action }) => {
   const openItem = useExplorerStore((s) => s.openItem)
+  const isSelected = useExplorerStore((s) => s.selection.has(item.path))
+  const selectOne = useExplorerStore((s) => s.selectOne)
+  const toggleSelect = useExplorerStore((s) => s.toggleSelect)
+  const rangeSelectTo = useExplorerStore((s) => s.rangeSelectTo)
+  const openContextMenu = useExplorerStore((s) => s.openContextMenu)
+  const isQuickLookOpen = useExplorerStore((s) => s.isQuickLookOpen)
+  const updateQuickLook = useExplorerStore((s) => s.updateQuickLook)
+
   const parent = parentPath(item.path)
   const location =
     homeDir && parent.startsWith(homeDir) ? '~' + parent.slice(homeDir.length) : parent
+
+  const handleClick = (e: React.MouseEvent): void => {
+    if (e.metaKey || e.ctrlKey) {
+      toggleSelect(item.path)
+      return
+    }
+    if (e.shiftKey) {
+      rangeSelectTo(item.path)
+      if (isQuickLookOpen) void updateQuickLook(item.path)
+      return
+    }
+    selectOne(item.path)
+    if (isQuickLookOpen) void updateQuickLook(item.path)
+  }
+
+  const handleContextMenu = (e: React.MouseEvent): void => {
+    e.preventDefault()
+    e.stopPropagation()
+    const s = useExplorerStore.getState()
+    if (!s.selection.has(item.path)) {
+      selectOne(item.path)
+      if (isQuickLookOpen) void updateQuickLook(item.path)
+    }
+    openContextMenu(e.clientX, e.clientY, item.path, item)
+  }
+
   return (
     <div
-      className={styles.row}
+      className={`${styles.row} ${isSelected ? styles.rowSelected : ''}`}
+      onClick={handleClick}
       onDoubleClick={() => void openItem(item)}
+      onContextMenu={handleContextMenu}
+      data-path={item.path}
       title={item.path}
     >
       <Thumbnail item={item} size={22} />
@@ -106,12 +143,12 @@ const ItemRow: React.FC<{
 }
 
 /** One category's contents on the Home page, resolved from its stored paths. */
-const CategoryTab: React.FC<{ category: SidebarCategory; homeDir: string }> = ({
-  category,
-  homeDir
-}) => {
+const CategoryTab: React.FC<{
+  category: SidebarCategory
+  homeDir: string
+  items: FileItem[]
+}> = ({ category, homeDir, items }) => {
   const removeFromCategory = useExplorerStore((s) => s.removeFromCategory)
-  const items = useResolved(category.paths, (p) => removeFromCategory(category.id, p))
 
   if (items.length === 0) {
     return (
@@ -147,20 +184,47 @@ const HomeView: React.FC = () => {
   const homeDir = useExplorerStore((s) => s.homeDir)
   const removeRecent = useExplorerStore((s) => s.removeRecent)
   const clearRecents = useExplorerStore((s) => s.clearRecents)
+  const clearSelection = useExplorerStore((s) => s.clearSelection)
 
   // 'recent' or a category id. Falls back if the selected category is deleted.
   const [selected, setSelected] = useState('recent')
   const tab = selected !== 'recent' && !categories.some((c) => c.id === selected) ? 'recent' : selected
-  const setTab = setSelected
+  const setTab = (newTab: string): void => {
+    setSelected(newTab)
+    clearSelection()
+  }
 
   const recentItems = useResolved(recents, removeRecent)
+  const activeCategory = tab !== 'recent' ? categories.find((c) => c.id === tab) : null
+  const categoryPaths = activeCategory ? activeCategory.paths : []
+  const categoryItems = useResolved(
+    categoryPaths,
+    (p) => activeCategory && useExplorerStore.getState().removeFromCategory(activeCategory.id, p)
+  )
+
+  const activeItems = tab === 'recent' ? recentItems : categoryItems
+
+  useEffect(() => {
+    useExplorerStore.setState({ items: activeItems })
+  }, [activeItems])
 
   // The Home page never surfaces the "Home" shortcut itself in Quick access.
   const folderLinks = quickLinks.filter((l) => l.icon !== 'home')
 
+  const handleClearRecents = (): void => {
+    clearSelection()
+    clearRecents()
+  }
+
+  const handleEmptyClick = (e: React.MouseEvent): void => {
+    if (e.target === e.currentTarget) {
+      clearSelection()
+    }
+  }
+
   return (
-    <div className={styles.home}>
-      <div className={styles.inner}>
+    <div className={styles.home} onClick={handleEmptyClick}>
+      <div className={styles.inner} onClick={handleEmptyClick}>
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>Quick access</h2>
           <div className={styles.quickGrid}>
@@ -200,7 +264,7 @@ const HomeView: React.FC = () => {
               </button>
             ))}
             {tab === 'recent' && recentItems.length > 0 ? (
-              <button type="button" className={styles.clear} onClick={clearRecents}>
+              <button type="button" className={styles.clear} onClick={handleClearRecents}>
                 Clear
               </button>
             ) : null}
@@ -210,7 +274,7 @@ const HomeView: React.FC = () => {
             recentItems.length === 0 ? (
               <div className={styles.empty}>Files and folders you open will show up here.</div>
             ) : (
-              <div className={styles.list}>
+              <div className={styles.list} onClick={handleEmptyClick}>
                 {recentItems.map((item) => (
                   <ItemRow
                     key={item.path}
@@ -228,8 +292,9 @@ const HomeView: React.FC = () => {
           ) : (
             <CategoryTab
               key={tab}
-              category={categories.find((c) => c.id === tab)!}
+              category={activeCategory!}
               homeDir={homeDir}
+              items={categoryItems}
             />
           )}
         </section>

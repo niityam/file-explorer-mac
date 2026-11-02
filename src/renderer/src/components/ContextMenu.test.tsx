@@ -263,6 +263,30 @@ describe('ContextMenu', () => {
       await clickItem('Open')
       expect(openItem).not.toHaveBeenCalled()
     })
+
+    it('Open file location navigates to parent directory and selects the item', async () => {
+      const navigateTo = spyAction('navigateTo')
+      const selectOne = spyAction('selectOne')
+      openItemMenu(makeFileItem({ name: 'a.txt', path: '/Users/test/Downloads/a.txt' }))
+      render(<ContextMenu />)
+      await clickItem('Open file location')
+      expect(navigateTo).toHaveBeenCalledWith('/Users/test/Downloads')
+      expect(selectOne).toHaveBeenCalledWith('/Users/test/Downloads/a.txt')
+    })
+
+    it('Remove from Recent appears and removes the item when present in recents', async () => {
+      const removeRecent = spyAction('removeRecent')
+      useExplorerStore.setState({
+        currentPath: '/p',
+        items: [makeFileItem({ name: 'a.txt', path: '/p/a.txt' })],
+        recents: ['/p/a.txt'],
+        selection: new Set(['/p/a.txt']),
+        contextMenu: { x: 0, y: 0, targetPath: '/p/a.txt' }
+      })
+      render(<ContextMenu />)
+      await clickItem('Remove from Recent')
+      expect(removeRecent).toHaveBeenCalledWith('/p/a.txt')
+    })
   })
 
   describe('background (no target) menu', () => {

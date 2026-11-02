@@ -3,6 +3,7 @@ import { Menu, type MenuItem } from '@/components/Menu'
 import { useExplorerStore } from '@/store/explorerStore'
 import type { GroupKey, SortKey, ViewMode } from '@/store/explorerStore'
 import { supportsWebLink, type CloudProvider } from '@shared/types'
+import { parentPath } from '@/utils/pathUtils'
 
 const VIEW_MODES: { mode: ViewMode; label: string }[] = [
   { mode: 'extra-large', label: 'Extra large icons' },
@@ -88,11 +89,29 @@ const ContextMenu: React.FC = () => {
   const categories = useExplorerStore((s) => s.categories)
   const addToCategory = useExplorerStore((s) => s.addToCategory)
   const addCategory = useExplorerStore((s) => s.addCategory)
+  const recents = useExplorerStore((s) => s.recents)
+  const removeRecent = useExplorerStore((s) => s.removeRecent)
+  const navigateTo = useExplorerStore((s) => s.navigateTo)
+  const selectOne = useExplorerStore((s) => s.selectOne)
+
+  const openFileLocation = async (filePath: string): Promise<void> => {
+    closeContextMenu()
+    const parent = parentPath(filePath)
+    if (parent && parent !== filePath) {
+      await navigateTo(parent)
+      selectOne(filePath)
+      setTimeout(() => {
+        const escaped = filePath.replace(/["\\]/g, '\\$&')
+        document.querySelector(`[data-path="${escaped}"]`)?.scrollIntoView({ block: 'nearest' })
+      }, 50)
+    }
+  }
 
   if (contextMenu === null) return null
 
   const target = contextMenu.targetPath
-  const targetItem = target ? items.find((i) => i.path === target) : undefined
+  const targetItem =
+    contextMenu.item ?? (target ? items.find((i) => i.path === target) : undefined)
   const isZip = !!targetItem && targetItem.ext === 'zip'
   const canPin = !!targetItem && targetItem.isDirectory
 
@@ -125,7 +144,17 @@ const ContextMenu: React.FC = () => {
 
   if (target) {
     menuItems = [
-      { label: 'Open', onClick: () => targetItem && void openItem(targetItem) },
+      {
+        label: 'Open',
+        onClick: () => {
+          if (targetItem) void openItem(targetItem)
+          else if (target) void window.api.openPath(target)
+        }
+      },
+      {
+        label: 'Open file location',
+        onClick: () => void openFileLocation(target)
+      },
       ...(canPin
         ? [
             {
@@ -212,6 +241,15 @@ const ContextMenu: React.FC = () => {
       { type: 'separator' },
       { label: 'Copy as path', onClick: copyPathSelection },
       { label: 'Reveal in Finder', onClick: revealSelectionInFinder },
+      ...(recents.includes(target)
+        ? [
+            {
+              label: 'Remove from Recent',
+              icon: 'close',
+              onClick: () => removeRecent(target)
+            } as MenuItem
+          ]
+        : []),
       { type: 'separator' },
       {
         label: 'Move to Trash',

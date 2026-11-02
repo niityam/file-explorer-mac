@@ -233,4 +233,28 @@ describe('HomeView', () => {
       screen.getByText('Files and folders you open will show up here.')
     ).toBeInTheDocument()
   })
+
+  it('selects an item on single click and opens context menu on right click', async () => {
+    const user = userEvent.setup()
+    useExplorerStore.setState({ recents: ['/Users/test/a.txt'], homeDir: '/Users/test' })
+    api.getFileItem.mockResolvedValue({
+      ok: true,
+      data: makeFileItem({ name: 'a.txt', path: '/Users/test/a.txt' })
+    })
+    const { container } = render(<HomeView />)
+    const rowText = await screen.findByText('a.txt')
+    await user.click(rowText)
+    expect(useExplorerStore.getState().selection.has('/Users/test/a.txt')).toBe(true)
+
+    // Right-click opens context menu
+    const { fireEvent } = await import('@testing-library/react')
+    fireEvent.contextMenu(rowText)
+    expect(useExplorerStore.getState().contextMenu?.targetPath).toBe('/Users/test/a.txt')
+    expect(useExplorerStore.getState().contextMenu?.item?.path).toBe('/Users/test/a.txt')
+
+    // Click background clears selection
+    const homeEl = container.querySelector(`.${HomeView.name}`) || container.firstElementChild!
+    fireEvent.click(homeEl)
+    expect(useExplorerStore.getState().selection.size).toBe(0)
+  })
 })

@@ -103,6 +103,7 @@ export interface ContextMenuState {
   y: number
   /** Path the menu was opened on; null = empty area (background) menu. */
   targetPath: string | null
+  item?: FileItem
 }
 
 interface ExplorerState {
@@ -238,7 +239,7 @@ interface ExplorerState {
   runSearch: () => Promise<void>
   clearSearch: () => void
 
-  openContextMenu: (x: number, y: number, targetPath: string | null) => void
+  openContextMenu: (x: number, y: number, targetPath: string | null, item?: FileItem) => void
   closeContextMenu: () => void
 
   flashStatus: (msg: string) => void
@@ -910,8 +911,10 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
     void get().loadDir(get().currentPath)
   },
 
-  openContextMenu: (x, y, targetPath) => {
-    set({ contextMenu: { x, y, targetPath }, contextCloud: null })
+  openContextMenu: (x, y, targetPath, item) => {
+    const contextMenu: ContextMenuState = { x, y, targetPath }
+    if (item) contextMenu.item = item
+    set({ contextMenu, contextCloud: null })
     // Keep the Paste entry's enabled state honest about external copies.
     void get().refreshClipboardStatus()
     // Cheap (one stat against cached roots); the cloud entries appear as soon as
@@ -1258,7 +1261,11 @@ export function selectVisibleItems(state: {
   showHidden: boolean
   sortKey: SortKey
   sortDir: SortDir
+  currentPath?: string
 }): FileItem[] {
+  if (state.currentPath === HOME_PATH) {
+    return state.items
+  }
   if (
     visibleCache &&
     visibleCache.items === state.items &&
